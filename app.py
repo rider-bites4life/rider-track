@@ -10,13 +10,13 @@ app = Flask(__name__)
 CORS(app)
 
 # Supabase Connection
-# Password mein '@' ki jagah '%40' use kiya hai taake connection error na aaye
+# Password fix: @ ko %40 likha gaya hai taake connection secure rahe
 app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:%40hashir4808@db.pdjaevouahjqccdcqoda.supabase.co:5432/postgres'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 db = SQLAlchemy(app)
 
-# --- Models (Supabase ke mutabiq) ---
+# --- Database Models ---
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(100), unique=True)
@@ -32,12 +32,11 @@ class Rider(db.Model):
     device_info = db.Column(db.String(255), default="Not Registered")
     r_time = db.Column(db.String(50), default="--") 
     a_time = db.Column(db.String(50), default="--") 
-    ring_status = db.Column(db.String(20), default="idle")
+    ring_status = db.Column(db.String(20), default="silent") # Default silent
 
-# --- Database Initialize ---
+# --- Initialize Database ---
 with app.app_context():
     db.create_all()
-    # Default Super Admin
     if not User.query.filter_by(email="super").first():
         db.session.add(User(email="super", password="4343", role="superadmin"))
         db.session.commit()
@@ -50,7 +49,7 @@ def get_pk_time():
 
 @app.route('/')
 def home():
-    return jsonify({"status": "Online", "database": "Supabase Permanent Connected"})
+    return jsonify({"status": "Online", "database": "Supabase Connected", "time": get_pk_time()})
 
 @app.route('/login', methods=['POST'])
 def login():
@@ -88,15 +87,6 @@ def add_rider():
     db.session.commit()
     return jsonify({"code": code, "success": True})
 
-@app.route('/delete_rider/<code>', methods=['DELETE'])
-def delete_rider(code):
-    r = Rider.query.filter_by(code=code).first()
-    if r:
-        db.session.delete(r)
-        db.session.commit()
-        return jsonify({"success": True})
-    return jsonify({"success": False}), 404
-
 @app.route('/update_status', methods=['POST'])
 def update_status():
     data = request.json
@@ -105,7 +95,7 @@ def update_status():
         r.status = data['status']
         if data['status'] in ['Coming', 'Here']:
             r.r_time = get_pk_time()
-        r.ring_status = "idle"
+        r.ring_status = "silent" # Ringing band karein
         db.session.commit()
         return jsonify({"success": True})
     return jsonify({"error": "Rider not found"}), 404
@@ -117,7 +107,7 @@ def set_on_route():
     if r:
         r.status = "On Route"
         r.a_time = get_pk_time()
-        r.ring_status = "idle"
+        r.ring_status = "silent"
         db.session.commit()
         return jsonify({"success": True})
     return jsonify({"error": "Rider not found"}), 404
@@ -137,7 +127,7 @@ def stop_ring():
     data = request.json
     r = Rider.query.filter_by(code=data['code']).first()
     if r:
-        r.ring_status = "idle"
+        r.ring_status = "silent"
         db.session.commit()
         return jsonify({"success": True})
     return jsonify({"error": "Rider not found"}), 404
@@ -154,6 +144,15 @@ def add_admin():
 def get_admins():
     admins = User.query.filter_by(role='admin').all()
     return jsonify([{"id": a.id, "email": a.email, "device": a.last_device} for a in admins])
+
+@app.route('/delete_rider/<code>', methods=['DELETE'])
+def delete_rider(code):
+    r = Rider.query.filter_by(code=code).first()
+    if r:
+        db.session.delete(r)
+        db.session.commit()
+        return jsonify({"success": True})
+    return jsonify({"success": False}), 404
 
 @app.route('/delete_admin/<int:id>', methods=['DELETE'])
 def delete_admin(id):
