@@ -13,7 +13,7 @@
         .btn { width: 100%; padding: 25px; margin: 10px 0; border: none; border-radius: 12px; font-size: 20px; font-weight: bold; cursor: pointer; }
         .coming { background: #f59e0b; color: #000; }
         .here { background: #10b981; color: #fff; }
-        .stop-btn { background: #ef4444; color: white; display: none; animation: pulse 0.8s infinite; }
+        .stop-btn { background: #ef4444; color: white; display: none; animation: pulse 0.8s infinite; margin-bottom: 15px; }
         @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
         .hidden { display: none; }
         #net-error { background: #ef4444; padding: 10px; border-radius: 8px; margin-bottom: 15px; display: none; }
@@ -53,6 +53,7 @@
     <div class="branding">Powered by <br> <b>HASHIR JUNAID</b></div>
 
     <script>
+        // Naya Koyeb URL Update kiya hai
         const API = "https://blind-rivkah-riderpl31-729d2d15.koyeb.app";
         let ringTimeout = null;
 
@@ -65,9 +66,13 @@
 
         async function registerDevice() {
             const code = document.getElementById('rider-code').value;
+            
+            // Audio permission ke liye ek baar trigger
+            const audio = document.getElementById('ring-audio');
+            audio.play().then(() => { audio.pause(); }).catch(e => {});
+
             const res = await fetch(`${API}/check_code/${code}`);
-            const data = await res.json();
-            if(data.success) {
+            if(res.ok) {
                 localStorage.setItem('rider_code', code);
                 showActions();
                 fetchRiderName();
@@ -88,10 +93,10 @@
         function showActions() {
             document.getElementById('setup-section').classList.add('hidden');
             document.getElementById('action-section').classList.remove('hidden');
-            startPolling(); // Call check karne ke liye polling start
+            startPolling();
         }
 
-        // Polling: Har 3 second baad check karega ke Admin call kar raha hai ya nahi
+        // Backend se Ring status mangwane ke liye polling
         function startPolling() {
             setInterval(async () => {
                 try {
@@ -102,6 +107,8 @@
 
                     if(rider && rider.ring_status === "ringing") {
                         triggerRing();
+                    } else {
+                        stopRingInternal();
                     }
                 } catch (e) {}
             }, 3000);
@@ -111,23 +118,21 @@
             const audio = document.getElementById('ring-audio');
             const stopBtn = document.getElementById('stop-ring');
             
-            audio.volume = 1.0; // Full volume
-            audio.play().catch(e => console.log("User interaction needed for audio"));
-            stopBtn.style.display = 'block';
+            if(audio.paused) {
+                audio.play().catch(e => console.log("Audio play blocked"));
+                stopBtn.style.display = 'block';
+            }
 
-            // 1 Minute (60 sec) timer for No Response
             if(!ringTimeout) {
                 ringTimeout = setTimeout(async () => {
                     stopRingInternal();
-                    // Status ko "No Response" kar do
-                    await s('No Response');
+                    await s('No Response'); // 1 min baad No Response status
                 }, 60000);
             }
         }
 
         async function stopRingManual() {
             stopRingInternal();
-            // Backend ko batayein ke ring rok di gayi hai
             await fetch(`${API}/admin/stop_ring`, {
                 method:'POST', headers:{'Content-Type':'application/json'},
                 body: JSON.stringify({code: localStorage.getItem('rider_code')})
@@ -150,10 +155,10 @@
                 body: JSON.stringify({code: localStorage.getItem('rider_code'), status:st})
             });
             if(res.ok) {
-                document.getElementById('m').innerText = "Status: " + st;
+                document.getElementById('m').innerText = "Status Updated!";
                 document.getElementById('m').style.color = "#10b981";
             } else {
-                document.getElementById('m').innerText = "Retry!";
+                document.getElementById('m').innerText = "Error! Try Again";
                 document.getElementById('m').style.color = "#ef4444";
             }
         }
@@ -163,6 +168,4 @@
         }, 2000);
     </script>
 </body>
-
 </html>
-
