@@ -1,14 +1,15 @@
 from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
-from datetime import datetime, timedelta
+from datetime import datetime
 import random
 import os
 
 app = Flask(__name__)
-CORS(app, resources={r"/*": {"origins": "*"}})
+# Sabhi origins ko allow karne ke liye taake frontend connect ho sakay
+CORS(app)
 
-# Database configuration
+# Database configuration - Koyeb ke liye /tmp folder zaroori hai
 basedir = os.path.abspath(os.path.dirname(__file__))
 db_path = os.path.join('/tmp', 'rider_system_final.db')
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + db_path
@@ -31,9 +32,8 @@ class Rider(db.Model):
     device_info = db.Column(db.String(255), default="Not Registered")
     r_time = db.Column(db.String(50), default="--") 
     a_time = db.Column(db.String(50), default="--") 
-    last_click_dt = db.Column(db.DateTime, default=datetime.utcnow())
-    # Ringing Features
-    ring_status = db.Column(db.String(20), default="idle") # idle, ringing
+    last_click_dt = db.Column(db.DateTime, default=datetime.utcnow)
+    ring_status = db.Column(db.String(20), default="idle")
 
 # --- Database Initialization ---
 def init_db():
@@ -46,12 +46,9 @@ def init_db():
 init_db()
 
 # --- Routes ---
-
 @app.route('/')
 def home():
     return jsonify({"status": "Online", "message": "Bites4Life API is Running!"})
-
-# --- Calling Routes ---
 
 @app.route('/admin/ring_rider', methods=['POST'])
 def ring_rider():
@@ -72,8 +69,6 @@ def stop_ring():
         db.session.commit()
         return jsonify({"success": True})
     return jsonify({"error": "Rider not found"}), 404
-
-# --- Standard Routes ---
 
 @app.route('/login', methods=['POST'])
 def login():
@@ -103,13 +98,9 @@ def update_status():
     data = request.json
     r = Rider.query.filter_by(code=data['code']).first()
     if not r: return jsonify({"error": "Invalid Code"}), 404
-    
     r.status = data['status']
     r.r_time = datetime.now().strftime("%I:%M %p")
-    
-    # Agar status update ho jaye to ring khud hi idle ho jani chahiye
     r.ring_status = "idle"
-    
     db.session.commit()
     return jsonify({"success": True})
 
@@ -146,5 +137,8 @@ def delete_rider(code):
         db.session.commit()
     return jsonify({"success": True})
 
+# --- Koyeb Specific Port Configuration ---
 if __name__ == '__main__':
-    app.run(debug=True)
+    # Koyeb environment variable 'PORT' use karta hai
+    port = int(os.environ.get('PORT', 8080))
+    app.run(host='0.0.0.0', port=port)
