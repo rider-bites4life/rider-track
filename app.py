@@ -6,11 +6,10 @@ import random
 import os
 
 app = Flask(__name__)
-# Sabhi origins ko allow karne ke liye taake frontend connect ho sakay
+# CORS zaroori hai taake GitHub Pages se request block na ho
 CORS(app)
 
 # Database configuration - Koyeb ke liye /tmp folder zaroori hai
-basedir = os.path.abspath(os.path.dirname(__file__))
 db_path = os.path.join('/tmp', 'rider_system_final.db')
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + db_path
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
@@ -36,39 +35,44 @@ class Rider(db.Model):
     ring_status = db.Column(db.String(20), default="idle")
 
 # --- Database Initialization ---
-def init_db():
-    with app.app_context():
-        db.create_all()
-        if not User.query.filter_by(role='superadmin').first():
-            db.session.add(User(email="super", password="4343", role="superadmin"))
-            db.session.commit()
+with app.app_context():
+    db.create_all()
+    # Default super admin agar pehle se nahi hai
+    if not User.query.filter_by(role='superadmin').first():
+        db.session.add(User(email="super", password="4343", role="superadmin"))
+        db.session.commit()
 
-init_db()
+# --- ADMIN MANAGEMENT ROUTES (YE MISSING THAY) ---
 
-# --- Routes ---
+@app.route('/add_admin', methods=['POST'])
+def add_admin():
+    data = request.json
+    if not data.get('email') or not data.get('password'):
+        return jsonify({"error": "Missing data"}), 400
+    new_admin = User(email=data['email'], password=data['password'], role='admin')
+    db.session.add(new_admin)
+    db.session.commit()
+    return jsonify({"success": True})
+
+@app.route('/get_admins', methods=['GET'])
+def get_admins():
+    admins = User.query.filter_by(role='admin').all()
+    return jsonify([{"id": a.id, "email": a.email, "device": a.last_device} for a in admins])
+
+@app.route('/delete_admin/<int:id>', methods=['DELETE'])
+def delete_admin(id):
+    u = User.query.get(id)
+    if u:
+        db.session.delete(u)
+        db.session.commit()
+        return jsonify({"success": True})
+    return jsonify({"error": "Admin not found"}), 404
+
+# --- RIDER & SYSTEM ROUTES ---
+
 @app.route('/')
 def home():
     return jsonify({"status": "Online", "message": "Bites4Life API is Running!"})
-
-@app.route('/admin/ring_rider', methods=['POST'])
-def ring_rider():
-    data = request.json
-    r = Rider.query.filter_by(code=data['code']).first()
-    if r:
-        r.ring_status = "ringing"
-        db.session.commit()
-        return jsonify({"success": True})
-    return jsonify({"error": "Rider not found"}), 404
-
-@app.route('/admin/stop_ring', methods=['POST'])
-def stop_ring():
-    data = request.json
-    r = Rider.query.filter_by(code=data['code']).first()
-    if r:
-        r.ring_status = "idle"
-        db.session.commit()
-        return jsonify({"success": True})
-    return jsonify({"error": "Rider not found"}), 404
 
 @app.route('/login', methods=['POST'])
 def login():
@@ -93,6 +97,22 @@ def get_riders():
         "ring_status": r.ring_status
     } for r in riders])
 
+@app.route('/add_rider', methods=['POST'])
+def add_rider():
+    code = str(random.randint(1000, 9999))
+    db.session.add(Rider(name=request.json['name'], code=code))
+    db.session.commit()
+    return jsonify({"code": code, "success": True})
+
+@app.route('/delete_rider/<code>', methods=['DELETE'])
+def delete_rider(code):
+    r = Rider.query.filter_by(code=code).first()
+    if r:
+        db.session.delete(r)
+        db.session.commit()
+        return jsonify({"success": True})
+    return jsonify({"error": "Rider not found"}), 404
+
 @app.route('/update_status', methods=['POST'])
 def update_status():
     data = request.json
@@ -116,29 +136,17 @@ def set_on_route():
         return jsonify({"success": True})
     return jsonify({"error": "Rider not found"}), 404
 
-@app.route('/check_code/<code>', methods=['GET'])
-def check_code(code):
-    r = Rider.query.filter_by(code=code).first()
-    if r: return jsonify({"success": True, "name": r.name})
-    return jsonify({"success": False}), 404
-
-@app.route('/add_rider', methods=['POST'])
-def add_rider():
-    code = str(random.randint(1000, 9999))
-    db.session.add(Rider(name=request.json['name'], code=code))
-    db.session.commit()
-    return jsonify({"code": code, "success": True})
-
-@app.route('/delete_rider/<code>', methods=['DELETE'])
-def delete_rider(code):
-    r = Rider.query.filter_by(code=code).first()
+@app.route('/admin/ring_rider', methods=['POST'])
+def ring_rider():
+    data = request.json
+    r = Rider.query.filter_by(code=data['code']).first()
     if r:
-        db.session.delete(r)
+        r.ring_status = "ringing"
         db.session.commit()
-    return jsonify({"success": True})
+        return jsonify({"success": True})
+    return jsonify({"error": "Rider not found"}), 404
 
 # --- Koyeb Specific Port Configuration ---
 if __name__ == '__main__':
-    # Koyeb environment variable 'PORT' use karta hai
     port = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=port)
