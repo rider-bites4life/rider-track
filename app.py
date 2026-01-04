@@ -1,24 +1,22 @@
+import os
 from flask import Flask, request, jsonify
 from flask_sqlalchemy import SQLAlchemy
 from flask_cors import CORS
 from datetime import datetime
+import pytz
 import random
-import os
 
 app = Flask(__name__)
 CORS(app)
 
-# Database path fix: Local pe current folder aur Koyeb pe /tmp folder
-if os.name == 'nt':  # Agar Windows (VS Code) hai
-    db_path = os.path.join(os.path.abspath(os.path.dirname(__file__)), 'rider_system.db')
-else:  # Agar Koyeb (Linux) hai
-    db_path = os.path.join('/tmp', 'rider_system_final.db')
-
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///' + db_path
+# Supabase Connection
+# Password mein '@' ki jagah '%40' use kiya hai taake connection error na aaye
+app.config['SQLALCHEMY_DATABASE_URI'] = 'postgresql://postgres:%40hashir4808@db.pdjaevouahjqccdcqoda.supabase.co:5432/postgres'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
 db = SQLAlchemy(app)
 
-# --- Models ---
+# --- Models (Supabase ke mutabiq) ---
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(100), unique=True)
@@ -34,21 +32,25 @@ class Rider(db.Model):
     device_info = db.Column(db.String(255), default="Not Registered")
     r_time = db.Column(db.String(50), default="--") 
     a_time = db.Column(db.String(50), default="--") 
-    last_click_dt = db.Column(db.DateTime, default=datetime.utcnow)
     ring_status = db.Column(db.String(20), default="idle")
 
-# --- Database Initialization ---
+# --- Database Initialize ---
 with app.app_context():
     db.create_all()
-    if not User.query.filter_by(role='superadmin').first():
+    # Default Super Admin
+    if not User.query.filter_by(email="super").first():
         db.session.add(User(email="super", password="4343", role="superadmin"))
         db.session.commit()
+
+# Pakistan Time Function
+def get_pk_time():
+    return datetime.now(pytz.timezone('Asia/Karachi')).strftime('%I:%M %p')
 
 # --- ROUTES ---
 
 @app.route('/')
 def home():
-    return jsonify({"status": "Online", "message": "Bites4Life API is Running!"})
+    return jsonify({"status": "Online", "database": "Supabase Permanent Connected"})
 
 @app.route('/login', methods=['POST'])
 def login():
@@ -64,25 +66,25 @@ def login():
 def get_riders():
     riders = Rider.query.all()
     return jsonify([{
-        "name": r.name, 
-        "code": r.code, 
-        "status": r.status, 
-        "r_time": r.r_time, 
-        "a_time": r.a_time, 
-        "device": r.device_info,
-        "ring_status": r.ring_status
+        "name": r.name, "code": r.code, "status": r.status, 
+        "r_time": r.r_time, "a_time": r.a_time, 
+        "device": r.device_info, "ring_status": r.ring_status
     } for r in riders])
 
 @app.route('/check_code/<code>', methods=['GET'])
 def check_code(code):
     r = Rider.query.filter_by(code=code).first()
-    if r: return jsonify({"success": True, "name": r.name})
+    if r: 
+        r.device_info = request.headers.get('User-Agent', 'Mobile App')
+        db.session.commit()
+        return jsonify({"success": True, "name": r.name})
     return jsonify({"success": False}), 404
 
 @app.route('/add_rider', methods=['POST'])
 def add_rider():
     code = str(random.randint(1000, 9999))
-    db.session.add(Rider(name=request.json['name'], code=code))
+    new_rider = Rider(name=request.json['name'], code=code)
+    db.session.add(new_rider)
     db.session.commit()
     return jsonify({"code": code, "success": True})
 
@@ -92,7 +94,8 @@ def delete_rider(code):
     if r:
         db.session.delete(r)
         db.session.commit()
-    return jsonify({"success": True})
+        return jsonify({"success": True})
+    return jsonify({"success": False}), 404
 
 @app.route('/update_status', methods=['POST'])
 def update_status():
@@ -100,7 +103,8 @@ def update_status():
     r = Rider.query.filter_by(code=data['code']).first()
     if r:
         r.status = data['status']
-        r.r_time = datetime.now().strftime("%I:%M %p")
+        if data['status'] in ['Coming', 'Here']:
+            r.r_time = get_pk_time()
         r.ring_status = "idle"
         db.session.commit()
         return jsonify({"success": True})
@@ -112,7 +116,7 @@ def set_on_route():
     r = Rider.query.filter_by(code=data['code']).first()
     if r:
         r.status = "On Route"
-        r.a_time = datetime.now().strftime("%I:%M %p")
+        r.a_time = get_pk_time()
         r.ring_status = "idle"
         db.session.commit()
         return jsonify({"success": True})
@@ -157,7 +161,8 @@ def delete_admin(id):
     if u:
         db.session.delete(u)
         db.session.commit()
-    return jsonify({"success": True})
+        return jsonify({"success": True})
+    return jsonify({"success": False}), 404
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 8080))
