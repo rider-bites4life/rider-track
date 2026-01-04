@@ -7,15 +7,22 @@
     <link rel="apple-touch-icon" href="favicon.png">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
-        body { font-family: sans-serif; background: #0f172a; color: white; text-align: center; padding: 20px; }
-        .box { background: #1e293b; padding: 30px; border-radius: 20px; max-width: 400px; margin: auto; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
+        body { font-family: sans-serif; background: #0f172a; color: white; text-align: center; padding: 20px; margin: 0; }
+        .box { background: #1e293b; padding: 30px; border-radius: 20px; max-width: 400px; margin: 20px auto; box-shadow: 0 10px 25px rgba(0,0,0,0.3); position: relative; z-index: 1; }
         input { width: 100%; padding: 15px; margin-bottom: 20px; border-radius: 10px; border: none; font-size: 18px; text-align: center; box-sizing: border-box; }
-        .btn { width: 100%; padding: 25px; margin: 10px 0; border: none; border-radius: 12px; font-size: 20px; font-weight: bold; cursor: pointer; }
+        .btn { width: 100%; padding: 20px; margin: 10px 0; border: none; border-radius: 12px; font-size: 18px; font-weight: bold; cursor: pointer; transition: 0.3s; }
         .coming { background: #f59e0b; color: #000; }
         .here { background: #10b981; color: #fff; }
-        .stop-btn { background: #ef4444; color: white; display: none; animation: pulse 0.8s infinite; margin-bottom: 15px; }
-        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
-        .hidden { display: none; }
+        .hidden { display: none !important; }
+        
+        /* Full Screen Alert Overlay */
+        #ring-overlay { 
+            position: fixed; inset: 0; background: #ef4444; z-index: 10000; 
+            display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px; 
+        }
+        .blink-bg { animation: blinker 0.6s linear infinite; }
+        @keyframes blinker { 50% { opacity: 0.5; } }
+
         #net-error { background: #ef4444; padding: 10px; border-radius: 8px; margin-bottom: 15px; display: none; }
         .branding { margin-top: 40px; font-size: 10px; color: #475569; letter-spacing: 1px; }
         #welcome-msg { color: #10b981; font-weight: bold; margin-bottom: 15px; display: none; }
@@ -23,10 +30,20 @@
 </head>
 <body>
     <div id="net-error">⚠️ No Internet Connection!</div>
+
+    <div id="ring-overlay" class="hidden blink-bg">
+        <div style="background:white; padding:30px; border-radius:50%; margin-bottom:20px;">
+            <i class="fas fa-bell" style="font-size:70px; color:#ef4444;"></i>
+        </div>
+        <h1 style="color:white; font-size:35px; text-align:center; font-weight:bold; margin:0;">⚠️ ADMIN CALLING!</h1>
+        <p style="color:white; font-size:18px; margin:20px 0;">Urgent attention required on terminal.</p>
+        <button class="btn" style="background:white; color:#ef4444; height:80px; font-size:22px; border-radius:20px;" onclick="stopRingManual()">
+            STOP RINGING
+        </button>
+    </div>
     
     <div class="box">
         <h2 style="margin-top:0">Rider Portal</h2>
-        
         <div id="welcome-msg"><i class="fas fa-user-circle"></i> Welcome, <span id="r-name"></span></div>
 
         <div id="setup-section">
@@ -36,13 +53,9 @@
         </div>
 
         <div id="action-section" class="hidden">
-            <button id="stop-ring" class="btn stop-btn" onclick="stopRingManual()">
-                <i class="fas fa-phone-slash"></i> STOP RINGING
-            </button>
-
             <button class="btn coming" onclick="s('Coming')">COMING</button>
             <button class="btn here" onclick="s('Here')">HERE</button>
-            <p id="m" style="color:#f59e0b"></p>
+            <p id="m" style="color:#f59e0b; font-weight:bold;"></p>
         </div>
     </div>
 
@@ -53,7 +66,6 @@
     <div class="branding">Powered by <br> <b>HASHIR JUNAID</b></div>
 
     <script>
-        // Naya Koyeb URL Update kiya hai
         const API = "https://blind-rivkah-riderpl31-729d2d15.koyeb.app";
         let ringTimeout = null;
 
@@ -65,29 +77,38 @@
         };
 
         async function registerDevice() {
-            const code = document.getElementById('rider-code').value;
+            const codeInput = document.getElementById('rider-code');
+            const code = codeInput.value;
             
-            // Audio permission ke liye ek baar trigger
+            // Audio init for mobile
             const audio = document.getElementById('ring-audio');
-            audio.play().then(() => { audio.pause(); }).catch(e => {});
+            audio.play().then(() => { audio.pause(); }).catch(e => console.log("Init Audio"));
 
-            const res = await fetch(`${API}/check_code/${code}`);
-            if(res.ok) {
-                localStorage.setItem('rider_code', code);
-                showActions();
-                fetchRiderName();
-            } else alert("Invalid Code!");
+            try {
+                const res = await fetch(`${API}/check_code/${code}`);
+                if(res.ok) {
+                    localStorage.setItem('rider_code', code);
+                    showActions();
+                    fetchRiderName();
+                } else {
+                    alert("Invalid Code!");
+                }
+            } catch (e) {
+                alert("Connection Error!");
+            }
         }
 
         async function fetchRiderName() {
             const code = localStorage.getItem('rider_code');
-            const res = await fetch(`${API}/get_riders`);
-            const data = await res.json();
-            const rider = data.find(r => r.code === code);
-            if(rider) {
-                document.getElementById('welcome-msg').style.display = 'block';
-                document.getElementById('r-name').innerText = rider.name;
-            }
+            try {
+                const res = await fetch(`${API}/get_riders`);
+                const data = await res.json();
+                const rider = data.find(r => r.code === code);
+                if(rider) {
+                    document.getElementById('welcome-msg').style.display = 'block';
+                    document.getElementById('r-name').innerText = rider.name;
+                }
+            } catch(e) {}
         }
 
         function showActions() {
@@ -96,9 +117,9 @@
             startPolling();
         }
 
-        // Backend se Ring status mangwane ke liye polling
         function startPolling() {
             setInterval(async () => {
+                if (!navigator.onLine) return;
                 try {
                     const res = await fetch(`${API}/get_riders`);
                     const data = await res.json();
@@ -111,62 +132,67 @@
                         stopRingInternal();
                     }
                 } catch (e) {}
-            }, 3000);
+            }, 3500); // Optimized for battery
         }
 
         function triggerRing() {
             const audio = document.getElementById('ring-audio');
-            const stopBtn = document.getElementById('stop-ring');
+            const overlay = document.getElementById('ring-overlay');
             
             if(audio.paused) {
-                audio.play().catch(e => console.log("Audio play blocked"));
-                stopBtn.style.display = 'block';
+                overlay.classList.remove('hidden');
+                audio.volume = 1.0;
+                audio.play().catch(e => console.log("Play blocked"));
             }
 
             if(!ringTimeout) {
                 ringTimeout = setTimeout(async () => {
-                    stopRingInternal();
-                    await s('No Response'); // 1 min baad No Response status
+                    stopRingManual(); // 1 min auto-stop
+                    await s('No Response');
                 }, 60000);
             }
         }
 
         async function stopRingManual() {
             stopRingInternal();
+            const code = localStorage.getItem('rider_code');
             await fetch(`${API}/admin/stop_ring`, {
                 method:'POST', headers:{'Content-Type':'application/json'},
-                body: JSON.stringify({code: localStorage.getItem('rider_code')})
+                body: JSON.stringify({code: code})
             });
         }
 
         function stopRingInternal() {
             const audio = document.getElementById('ring-audio');
+            const overlay = document.getElementById('ring-overlay');
             audio.pause();
             audio.currentTime = 0;
-            document.getElementById('stop-ring').style.display = 'none';
+            overlay.classList.add('hidden');
             clearTimeout(ringTimeout);
             ringTimeout = null;
         }
 
         async function s(st) {
-            document.getElementById('m').innerText = "Updating...";
-            const res = await fetch(`${API}/update_status`, {
-                method:'POST', headers:{'Content-Type':'application/json'},
-                body: JSON.stringify({code: localStorage.getItem('rider_code'), status:st})
-            });
-            if(res.ok) {
-                document.getElementById('m').innerText = "Status Updated!";
-                document.getElementById('m').style.color = "#10b981";
-            } else {
-                document.getElementById('m').innerText = "Error! Try Again";
-                document.getElementById('m').style.color = "#ef4444";
+            const msg = document.getElementById('m');
+            msg.innerText = "Updating Status...";
+            try {
+                const res = await fetch(`${API}/update_status`, {
+                    method:'POST', headers:{'Content-Type':'application/json'},
+                    body: JSON.stringify({code: localStorage.getItem('rider_code'), status:st})
+                });
+                if(res.ok) {
+                    msg.innerText = "Status: " + st;
+                    msg.style.color = "#10b981";
+                }
+            } catch (e) {
+                msg.innerText = "Sync Error!";
+                msg.style.color = "#ef4444";
             }
         }
 
         setInterval(() => {
             document.getElementById('net-error').style.display = navigator.onLine ? 'none' : 'block';
-        }, 2000);
+        }, 3000);
     </script>
 </body>
 </html>
-
