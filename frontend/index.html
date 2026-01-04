@@ -29,7 +29,7 @@
         .btn-outline { background: transparent; border: 1px solid var(--primary); color: var(--primary); }
         .btn-active-view { background: #10b981; color: white; }
         .login-screen { position: fixed; inset: 0; background: #0f172a; display: flex; align-items: center; justify-content: center; z-index: 10000; }
-        input { padding: 10px; border-radius: 8px; border: 1px solid #ddd; margin-right: 10px; }
+        input { padding: 10px; border-radius: 8px; border: 1px solid #ddd; margin-bottom: 10px; }
     </style>
 </head>
 <body>
@@ -37,8 +37,8 @@
 <div id="loginScreen" class="login-screen">
     <form onsubmit="login(event)" style="background:white; padding:40px; border-radius:20px; width:340px; text-align:center;">
         <h2 style="margin-bottom:30px">Portal Login</h2>
-        <input type="text" id="email" name="username" autocomplete="username" placeholder="Email" required style="width:100%; padding:12px; margin-bottom:15px; border-radius:8px; border:1px solid #ddd;">
-        <input type="password" id="pass" name="password" autocomplete="current-password" placeholder="Password" required style="width:100%; padding:12px; margin-bottom:25px; border-radius:8px; border:1px solid #ddd;">
+        <input type="text" id="email" name="username" autocomplete="username" placeholder="Email" required style="width:100%; padding:12px; border:1px solid #ddd;">
+        <input type="password" id="pass" name="password" autocomplete="current-password" placeholder="Password" required style="width:100%; padding:12px; border:1px solid #ddd;">
         <button type="submit" class="btn btn-p" style="width:100%; padding:14px">Login</button>
     </form>
 </div>
@@ -157,7 +157,7 @@
             loadAdmins();
         }
         loadRiders(); 
-        setInterval(loadRiders, 5000);
+        setInterval(loadRiders, 4000); // Polling speed improved
         keepBackendAlive();
     }
 
@@ -192,11 +192,11 @@
     }
 
     async function callRider(c) {
-        await fetch(`${API}/admin/ring_rider`, {
+        // alert hataya gaya taake system smooth chale
+        fetch(`${API}/admin/ring_rider`, {
             method:'POST', headers:{'Content-Type':'application/json'},
             body: JSON.stringify({code: c})
         });
-        alert("Calling Rider Terminal...");
     }
 
     async function setRoute(c) { 
@@ -205,11 +205,13 @@
     }
 
     async function addRider() {
-        const name = document.getElementById('rName').value;
+        const nameInput = document.getElementById('rName');
+        const name = nameInput.value;
         if(!name) return alert("Enter Name");
         const res = await fetch(`${API}/add_rider`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({name})});
         const d = await res.json(); 
         document.getElementById('codeDisplay').innerText = "CODE: " + d.code; 
+        nameInput.value = ''; // Input clear 
         loadRiders();
     }
 
@@ -222,7 +224,14 @@
     }
 
     async function addAdmin() {
-        await fetch(`${API}/add_admin`, {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({email:document.getElementById('newAdminEmail').value, password:document.getElementById('newAdminPass').value})});
+        const emailInput = document.getElementById('newAdminEmail');
+        const passInput = document.getElementById('newAdminPass');
+        await fetch(`${API}/add_admin`, {
+            method:'POST', 
+            headers:{'Content-Type':'application/json'}, 
+            body:JSON.stringify({email:emailInput.value, password:passInput.value})
+        });
+        emailInput.value = ''; passInput.value = ''; // Inputs clear 
         loadAdmins();
     }
     
